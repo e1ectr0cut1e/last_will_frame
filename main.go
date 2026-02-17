@@ -164,6 +164,25 @@ func main() {
 	}
 
 	log.Println("Authorized on account:", bot.Self.UserName)
+	var commands []tgbotapi.BotCommand
+	for i := range strings.Split(cameraAddresses, ",") {
+		commands = append(commands, tgbotapi.BotCommand{
+			Command:     fmt.Sprintf("/snap%d", i),
+			Description: fmt.Sprintf("📷 get a snapshot for channel %d", i),
+		})
+	}
+	for i := range strings.Split(cameraAddresses, ",") {
+		commands = append(commands, tgbotapi.BotCommand{
+			Command:     fmt.Sprintf("/video%d", i),
+			Description: fmt.Sprintf("📹 get a %s-second video for channel %d", videoDuration, i),
+		})
+	}
+
+	scope := tgbotapi.NewBotCommandScopeChat(numericChatId)
+	commandsConfig := tgbotapi.NewSetMyCommandsWithScope(scope, commands...)
+	if _, err = bot.Request(commandsConfig); err != nil {
+		log.Println("Unable to set Telegram commands", err)
+	}
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
