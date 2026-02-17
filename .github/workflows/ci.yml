@@ -22,12 +22,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Login to registry.hex128.io
+      - name: Login to the custom registry
         uses: docker/login-action@v2
         with:
-          registry: registry.hex128.io
-          username: ${{ secrets.HEX128_IO_REGISTRY_USERNAME }}
-          password: ${{ secrets.HEX128_IO_REGISTRY_PASSWORD }}
+          registry: ${{ secrets.CUSTOM_REGISTRY }}
+          username: ${{ secrets.CUSTOM_REGISTRY_USERNAME }}
+          password: ${{ secrets.CUSTOM_REGISTRY_PASSWORD }}
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
@@ -35,5 +35,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/hex128/last_will_frame:latest
-            registry.hex128.io/last_will_frame:latest
+            ghcr.io/${{ github.repository_owner }}/last_will_frame:latest
+            ${{ secrets.CUSTOM_REGISTRY }}/last_will_frame:latest
