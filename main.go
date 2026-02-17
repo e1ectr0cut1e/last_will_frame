@@ -173,7 +173,7 @@ func main() {
 	}
 	for i := range strings.Split(cameraAddresses, ",") {
 		commands = append(commands, tgbotapi.BotCommand{
-			Command:     fmt.Sprintf("/video%d", i),
+			Command:     fmt.Sprintf("/vid%d", i),
 			Description: fmt.Sprintf("📹 get a %s-second video for channel %d", videoDuration, i),
 		})
 	}
