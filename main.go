@@ -1,17 +1,17 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func getEnvDefault(key, fallback string) string {
@@ -29,14 +29,15 @@ var rtspPassword = os.Getenv("RTSP_PASSWORD")
 var rtspUrl = getEnvDefault("RTSP_URL", "/")
 var ffmpegBin = getEnvDefault("FFMPEG_BIN", "/usr/bin/ffmpeg")
 var snapshotDir = getEnvDefault("SNAPSHOT_DIR", "/dev/shm/last_will_frame_snapshots")
-var snapshotSequence, _ = strconv.ParseInt(getEnvDefault("SNAPSHOT_SEQUENCE", "3"), 10, 8)
-var snapshotSequenceInterval, _ = strconv.ParseInt(getEnvDefault("SNAPSHOT_SEQUENCE_INTERVAL", "2000"), 10, 64)
+var videoDuration = getEnvDefault("VIDEO_DURATION", "10")
 
 var numericChatId, _ = strconv.ParseInt(chatId, 10, 64)
 
 var bot *tgbotapi.BotAPI
 
 func Capture(rtspUrl string, streamName string) {
+	m3u8Path := fmt.Sprintf("%s/%s.m3u8", snapshotDir, streamName)
+	tsDirPath := fmt.Sprintf("%s/%s", snapshotDir, streamName)
 	snapshotPath := fmt.Sprintf("%s/%s.jpg", snapshotDir, streamName)
 	var initial = true
 	for {
@@ -48,10 +49,15 @@ func Capture(rtspUrl string, streamName string) {
 		lastMtime := time.Unix(0, 0)
 
 		for range [3]struct{}{} {
+			_ = os.Mkdir(tsDirPath, 0755)
 			cmd := exec.Command(
 				ffmpegBin,
 				"-y", "-timeout", "1000000", "-re", "-rtsp_transport", "tcp", "-i",
-				rtspUrl, "-an", "-vf", "select='eq(pict_type,PICT_TYPE_I)'",
+				rtspUrl, "-an", "-c", "copy", "-f", "hls", "-hls_time", videoDuration, "-hls_list_size", "2",
+				"-hls_flags", "delete_segments", "-strftime", "1",
+				"-hls_segment_filename", fmt.Sprintf("%s/%%Y%%m%%d%%H%%M%%S.ts", tsDirPath),
+				"-hls_base_url", fmt.Sprintf("%s/", streamName), m3u8Path,
+				"-an", "-vf", "select='eq(pict_type,PICT_TYPE_I)'",
 				"-vsync", "vfr", "-q:v", "23", "-update", "1", snapshotPath,
 			)
 			_ = cmd.Run()
@@ -65,89 +71,16 @@ func Capture(rtspUrl string, streamName string) {
 		}
 
 		if prevMtime != lastMtime {
-			SendVideo(streamName)
+			_, err := os.Stat(m3u8Path)
+			if err == nil {
+				SendVideo(streamName)
+				_ = os.Remove(m3u8Path)
+				_ = os.RemoveAll(tsDirPath)
+			} else {
+				SendSnap(streamName)
+			}
 		}
 		initial = false
-	}
-}
-
-func MaintainHistory(streamName string, interval int64) {
-	snapshotPath := fmt.Sprintf("%s/%s.jpg", snapshotDir, streamName)
-	nameTemplate := fmt.Sprintf("%s/%s-%%d.jpg", snapshotDir, streamName)
-	snapshotPaths := make([]string, snapshotSequence)
-	for i := range snapshotPaths {
-		snapshotPaths[i] = fmt.Sprintf(nameTemplate, i+1)
-	}
-	for {
-		_, err := os.Stat(snapshotPath)
-		if os.IsNotExist(err) {
-			//log.Println("File does not exist:", snapshotPath)
-			time.Sleep(time.Duration(interval) * time.Millisecond)
-			continue
-		} else if err != nil {
-			log.Println("Unable to obtain file info", err)
-			time.Sleep(time.Duration(interval) * time.Millisecond)
-			continue
-		}
-
-		if _, err := os.Stat(snapshotPaths[len(snapshotPaths)-1]); !os.IsNotExist(err) {
-			_ = os.Remove(snapshotPaths[len(snapshotPaths)-1])
-		}
-
-		for i := len(snapshotPaths) - 1; i > 0; i-- {
-			if _, err := os.Stat(snapshotPaths[i-1]); !os.IsNotExist(err) {
-				_ = os.Rename(snapshotPaths[i-1], snapshotPaths[i])
-			}
-		}
-
-		input, err := ioutil.ReadFile(snapshotPath)
-		if err != nil {
-			log.Println("Unable to read file", err)
-			time.Sleep(time.Duration(interval) * time.Millisecond)
-			continue
-		}
-
-		err = ioutil.WriteFile(snapshotPaths[0], input, 0644)
-		if err != nil {
-			log.Println("Unable to write file", err)
-			time.Sleep(time.Duration(interval) * time.Millisecond)
-			continue
-		}
-
-		files, err := ioutil.ReadDir(snapshotDir)
-		if err != nil {
-			log.Println("Unable to read directory", err)
-			time.Sleep(time.Duration(interval) * time.Millisecond)
-			continue
-		}
-
-		var unwantedFiles []string
-		prefix := fmt.Sprintf("%s-", streamName)
-		for _, file := range files {
-			if strings.HasPrefix(file.Name(), prefix) && strings.HasSuffix(file.Name(), filepath.Ext(snapshotPath)) {
-				match := false
-				for _, snapshotPath := range snapshotPaths {
-					if file.Name() == filepath.Base(snapshotPath) {
-						match = true
-						break
-					}
-				}
-				if !match {
-					unwantedFiles = append(unwantedFiles, file.Name())
-				}
-			}
-		}
-
-		for _, fileName := range unwantedFiles {
-			err = os.Remove(filepath.Join(snapshotDir, fileName))
-			if err != nil {
-				log.Println("Unable to remove unwanted file", err)
-				time.Sleep(time.Duration(interval) * time.Millisecond)
-				continue
-			}
-		}
-
-		time.Sleep(time.Duration(interval) * time.Millisecond)
 	}
 }
 
@@ -168,14 +101,32 @@ func SendSnap(streamName string) {
 }
 
 func SendVideo(streamName string) {
+	m3u8Path := fmt.Sprintf("%s/%s.m3u8", snapshotDir, streamName)
 	mp4Path := fmt.Sprintf("%s/%s.mp4", snapshotDir, streamName)
-	cmd := exec.Command(
-		ffmpegBin,
-		"-y", "-r", "1", "-i",
-		fmt.Sprintf("%s/%s-%%d.jpg", snapshotDir, streamName),
-		"-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-		"-vf", "tpad=stop_mode=clone:stop=1", mp4Path,
-	)
+
+	live := true
+	f, err := os.OpenFile(m3u8Path, os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		log.Println(fmt.Sprintf("Error opening %s: %v", m3u8Path, err))
+	} else {
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			if strings.Contains(sc.Text(), "#EXT-X-ENDLIST") {
+				live = false
+			}
+		}
+		if err := sc.Err(); err != nil {
+			log.Println(fmt.Sprintf("Error reading %s: %v", m3u8Path, err))
+		}
+	}
+	_ = f.Close()
+	args := []string{"-y"}
+	if live {
+		args = append(args, "-sseof", "-"+videoDuration, "-t", videoDuration)
+	}
+	args = append(args, "-i", m3u8Path, "-ignore_unknown", "-fflags", "+igndts", "-c", "copy", mp4Path)
+
+	cmd := exec.Command(ffmpegBin, args...)
 	log.Println(cmd.String())
 	_ = cmd.Run()
 	if _, err := os.Stat(mp4Path); err == nil {
@@ -206,7 +157,6 @@ func main() {
 			fmt.Sprintf("rtsp://%s:%s@%s%s", rtspUsername, rtspPassword, addresses[i], rtspUrl),
 			streamName,
 		)
-		go MaintainHistory(streamName, snapshotSequenceInterval)
 	}
 	bot, err = tgbotapi.NewBotAPI(telegramToken)
 	if err != nil {
