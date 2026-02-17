@@ -39,6 +39,9 @@ func Capture(rtspUrl string, streamName string) {
 	m3u8Path := fmt.Sprintf("%s/%s.m3u8", snapshotDir, streamName)
 	tsDirPath := fmt.Sprintf("%s/%s", snapshotDir, streamName)
 	snapshotPath := fmt.Sprintf("%s/%s.jpg", snapshotDir, streamName)
+	_ = os.Remove(snapshotPath)
+	_ = os.Remove(m3u8Path)
+	_ = os.RemoveAll(tsDirPath)
 	var initial = true
 	for {
 		prevSt, prevStErr := os.Stat(snapshotPath)
