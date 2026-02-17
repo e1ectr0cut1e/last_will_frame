@@ -1,5 +1,5 @@
 FROM golang:alpine
-WORKDIR $GOPATH/src/gitub.com/hex128/last_will_frame
+WORKDIR $GOPATH/src/gitub.com/e1ectr0cut1e/last_will_frame
 RUN apk add --no-cache ffmpeg
 COPY go.mod .
 COPY main.go .
