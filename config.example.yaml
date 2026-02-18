@@ -1,0 +1,54 @@
+---
+snapshot_dir: /dev/shm/last_will_frame_snapshots
+ffmpeg_bin: /usr/bin/ffmpeg
+video_duration: 10
+cameras:
+  - name: cam1
+    url: rtsp://192.0.0.2/
+  - name: cam2
+    url: rtsp://admin:12345@192.0.0.2:554/Streaming/Channels/201
+  - name: cam3
+    url: rtsp://192.0.0.3/cam/realmonitor?channel=3
+  - name: cam4
+    url: rtsp://admin:888888@192.0.0.4/cam/realmonitor?channel=4&subtype=0
+telegram:
+  token: 0123456789:ABCDEF_ghijklmno_PQRSTUVWXYZ0123456
+  chat_id: 12345678
+  messages:
+    access_denied: 🚫 Access denied
+    unknown_command: 🚫 Unsupported command
+    video_failed: 🚫 Failed to create video
+    snapshot_failed: 🚫 Snapshot doesn't exist
+  commands:
+    - command: snap1  # /snap1
+      type: snap      # snap | video
+      camera: cam1    # camera name
+      description: 📷 get a snapshot for cam1
+    - command: snap2
+      type: snap
+      camera: cam2
+      description: 📷 get a snapshot for cam2
+    - command: snap3
+      type: snap
+      camera: cam3
+      description: 📷 get a snapshot for cam3
+    - command: snap4
+      type: snap
+      camera: cam4
+      description: 📷 get a snapshot for cam4
+    - command: vid1
+      type: video
+      camera: cam1
+      description: 📹 get a video for channel cam1
+    - command: vid2
+      type: video
+      camera: cam2
+      description: 📹 get a video for channel cam2
+    - command: vid3
+      type: video
+      cam: cam3
+      description: 📹 get a video for channel cam3
+    - command: vid4
+      type: video
+      cam: cam4
+      description: 📹 get a video for channel cam4

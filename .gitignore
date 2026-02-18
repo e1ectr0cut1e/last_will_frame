@@ -2,3 +2,4 @@
 .idea/
 *.tar
 elevator_cam_bot
+config.yaml
